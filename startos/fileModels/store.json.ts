@@ -5,9 +5,15 @@ const { object, boolean } = matches
 export const shape = object({
   reindexBlockchain: boolean,
   reindexChainstate: boolean,
+  fullySynced: boolean,
+  snapshotInUse: boolean,
+  enableIpc: boolean.optional(),
 })
 
 export const storeJson = FileHelper.json(
-  '/media/startos/volumes/main/store.json',
+  {
+    volumeId: 'main',
+    subpath: '/store.json',
+  },
   shape,
 )

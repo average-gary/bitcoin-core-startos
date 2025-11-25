@@ -1,9 +1,18 @@
-import { Effects } from '@start9labs/start-sdk/base/lib/Effects'
-import { bitcoinConfFile } from './file-models/bitcoin.conf'
 import { sdk } from './sdk'
-import { peerInterfaceId } from './interfaces'
+export const rpcInterfaceId = 'rpc'
+export const peerInterfaceId = 'peer'
+export const zmqInterfaceId = 'zmq'
+export const zmqPort = 28332
+export const peerPort = 48333
+export const rpcPort = 8332  // External proxy port (keep for compatibility)
 
-export const rootDir = '/data'
+export const rootDir = '/.bitcoin'
+
+export const unprunedRpcbind = '0.0.0.0:48332'
+export const unprunedRpcallowIp = '0.0.0.0/0'
+
+export const prunedRpcbind = '127.0.0.1:48332'
+export const prunedRpcallowip = '127.0.0.1/32'
 
 export type GetNetworkInfo = {
   connections: number
@@ -51,36 +60,28 @@ export type GetBlockchainInfo = {
   warnings: string
 }
 
-export async function getRpcUsers(effects: Effects) {
-  const rpcauth = await getRpcAuth(effects)
-  if (!rpcauth) return
-  return [rpcauth].flat().map((e) => e.split(':', 2)[0])
-}
-
-export async function getRpcAuth(effects: Effects) {
-  return (await bitcoinConfFile.read().const(effects))?.rpcauth
-}
+export const ipcSocketPath = 'unix:/ipc/bitcoin-core.sock'
 
 export const bitcoinConfDefaults = {
   // RPC
-  rpcbind: '0.0.0.0:8332',
-  rpcallowip: '0.0.0.0/0',
+  rpcbind: unprunedRpcbind,
+  rpcallowip: unprunedRpcallowIp,
   rpcauth: undefined,
   rpcservertimeout: 30,
   rpcthreads: 4,
   rpcworkqueue: 16,
   rpccookiefile: '.cookie',
-  whitelist: ['172.18.0.0/16'],
-  bind: undefined,
+  enableIpc: true,
+  // whitebind: Removed - passed as CLI arg for testnet4
+  // bind: Removed - passed as CLI arg for testnet4
 
   // Mempool
   persistmempool: true,
   maxmempool: 300,
   mempoolexpiry: 336,
-  mempoolfullrbf: true,
   permitbaremultisig: true,
   datacarrier: true,
-  datacarriersize: 83,
+  datacarriersize: 10_000,
 
   // Peers
   listen: true,
@@ -96,6 +97,7 @@ export const bitcoinConfDefaults = {
   discardfee: 0.0001,
 
   // Other
+  blocknotify: undefined,
   prune: 0,
   zmqpubrawblock: 'tcp://0.0.0.0:28332',
   zmqpubhashblock: 'tcp://0.0.0.0:28332',
@@ -105,7 +107,8 @@ export const bitcoinConfDefaults = {
 
   coinstatsindex: false,
   txindex: false,
-  dbcache: 450,
+  dbcache: 5_000,
+  dbbatchsize: 33_554_432,
 
   peerbloomfilters: false,
   blockfilterindex: 'basic',
@@ -131,10 +134,7 @@ export function getExteralAddresses() {
     }
 
     const urlsWithNone = urls.reduce(
-      (obj, url) => ({
-        ...obj,
-        [url]: url,
-      }),
+      (obj, url) => ({ ...obj, [url]: url }),
       {} as Record<string, string>,
     )
 

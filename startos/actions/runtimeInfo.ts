@@ -1,9 +1,10 @@
 import { T } from '@start9labs/start-sdk'
 import { sdk } from '../sdk'
-import { GetBlockchainInfo, GetNetworkInfo, rootDir } from '../utils'
+import { GetBlockchainInfo, GetNetworkInfo, rootDir, ipcSocketPath } from '../utils'
 import { mainMounts } from '../main'
-import { bitcoinConfFile } from '../file-models/bitcoin.conf'
-import { rpcPort } from '../interfaces'
+import { bitcoinConfFile } from '../fileModels/bitcoin.conf'
+import { storeJson } from '../fileModels/store.json'
+import { rpcPort } from '../utils'
 
 export const runtimeInfo = sdk.Action.withoutInput(
   // id
@@ -34,8 +35,8 @@ export const runtimeInfo = sdk.Action.withoutInput(
         return await subc.execFail([
           'bitcoin-cli',
           `-conf=${rootDir}/bitcoin.conf`,
-          `-rpccookiefile=${rootDir}/.cookie`,
-          `-rpcport=${conf.prune ? 18332 : rpcPort}`,
+          `-rpccookiefile=${rootDir}/testnet4/.cookie`,
+          `-rpcport=${conf.prune ? 48332 : rpcPort}`,
           'getnetworkinfo',
         ])
       },
@@ -56,8 +57,8 @@ export const runtimeInfo = sdk.Action.withoutInput(
         return await subc.execFail([
           'bitcoin-cli',
           `-conf=${rootDir}/bitcoin.conf`,
-          `-rpccookiefile=${rootDir}/.cookie`,
-          `-rpcport=${conf.prune ? 18332 : rpcPort}`,
+          `-rpccookiefile=${rootDir}/testnet4/.cookie`,
+          `-rpcport=${conf.prune ? 48332 : rpcPort}`,
           'getblockchaininfo',
         ])
       },
@@ -70,8 +71,15 @@ export const runtimeInfo = sdk.Action.withoutInput(
     // return
     const value = [
       getConnections(networkInfoRaw),
-      getBlockchainInfo(blockchainInfoRaw),
     ]
+
+    const store = await storeJson.read().const(effects)
+    if (store?.enableIpc !== false) { // Default to true if not set
+      value.push(getIpcSocketPath())
+    }
+
+    value.push(getBlockchainInfo(blockchainInfoRaw))
+
     if (blockchainInfoRaw.softforks) {
       value.push(getSoftforkInfo(blockchainInfoRaw))
     }
@@ -80,10 +88,7 @@ export const runtimeInfo = sdk.Action.withoutInput(
       version: '1',
       title: 'Node Runtime Info',
       message: null,
-      result: {
-        type: 'group',
-        value,
-      },
+      result: { type: 'group', value },
     }
   },
 )
@@ -95,6 +100,18 @@ function getConnections(networkInfoRaw: GetNetworkInfo): T.ActionResultMember {
     description: 'The number of peers connected (inbound and outbound)',
     value: `${networkInfoRaw.connections} (${networkInfoRaw.connections_in} in / ${networkInfoRaw.connections_out} out)`,
     copyable: false,
+    masked: false,
+    qr: false,
+  }
+}
+
+function getIpcSocketPath(): T.ActionResultMember {
+  return {
+    type: 'single',
+    name: 'IPC Socket Path',
+    description: 'Unix socket path for IPC communication with Bitcoin Core. Other services can bind to this socket in their Docker configuration.',
+    value: ipcSocketPath,
+    copyable: true,
     masked: false,
     qr: false,
   }
@@ -205,12 +222,7 @@ function getSoftforks(
       }
     }
 
-    return {
-      type: 'group',
-      name: key,
-      description: null,
-      value,
-    }
+    return { type: 'group', name: key, description: null, value }
   })
 }
 

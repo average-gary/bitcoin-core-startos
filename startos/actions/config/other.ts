@@ -1,7 +1,7 @@
 import { sdk } from '../../sdk'
 import { utils } from '@start9labs/start-sdk'
 import * as diskusage from 'diskusage'
-import { bitcoinConfFile } from '../../file-models/bitcoin.conf'
+import { bitcoinConfFile } from '../../fileModels/bitcoin.conf'
 import { bitcoinConfDefaults } from '../../utils'
 import { T } from '@start9labs/start-sdk'
 
@@ -12,14 +12,11 @@ const {
   discardfee,
   prune,
   dbcache,
-  zmqpubhashblock,
-  zmqpubhashtx,
-  zmqpubrawtx,
-  zmqpubrawblock,
-  zmqpubsequence,
+  dbbatchsize,
   blockfilterindex,
   peerblockfilters,
   peerbloomfilters,
+  blocknotify,
 } = bitcoinConfDefaults
 
 const { InputSpec, Value } = sdk
@@ -43,17 +40,20 @@ const configSpec = sdk.InputSpec.of({
       disabled: disk.total < archivalMin ? 'Not enough disk space' : false,
     }
   }),
+  blocknotify: Value.text({
+    name: 'Block Notify',
+    required: false,
+    default: null,
+    description: 'Execute an arbitrary command when the best block changes',
+  }),
   coinstatsindex: Value.toggle({
     name: 'Coinstats Index',
-    default: !!coinstatsindex,
+    default: coinstatsindex,
     description:
       'Enabling Coinstats Index reduces the time for the gettxoutsetinfo RPC to complete at the cost of using additional disk space',
   }),
   wallet: Value.object(
-    {
-      name: 'Wallet',
-      description: 'Wallet Settings',
-    },
+    { name: 'Wallet', description: 'Wallet Settings' },
     InputSpec.of({
       enable: Value.toggle({
         name: 'Enable Wallet',
@@ -87,7 +87,7 @@ const configSpec = sdk.InputSpec.of({
       name: 'Pruning',
       description:
         'Set the maximum size of the blockchain you wish to store on disk. If your disk is larger than .9TB this value can be set to zero (0) to maintain a full archival node.',
-      warning: 'Increasing this value will require re-syncing your node.',
+      warning: 'If your node is already pruned increasing this value will require re-syncing your node. Switching from a full archival node to pruned will disable txindex (if enabled)',
       placeholder: 'Enter max blockchain size',
       required: disk.total < archivalMin,
       default: disk.total < archivalMin ? 550 : null,
@@ -99,15 +99,24 @@ const configSpec = sdk.InputSpec.of({
   dbcache: Value.number({
     name: 'Database Cache',
     description:
-      "How much RAM to allocate for caching the TXO set. Higher values improve syncing performance, but increase your chance of using up all your system's memory or corrupting your database in the event of an ungraceful shutdown. Set this high but comfortably below your system's total RAM during IBD, then turn down to 450 (or leave blank) once the sync completes.",
-    warning:
-      'WARNING: Increasing this value results in a higher chance of ungraceful shutdowns, which can leave your node unusable if it happens during the initial block download. Use this setting with caution. Be sure to set this back to the default (450 or leave blank) once your node is synced. DO NOT press the STOP button if your dbcache is large. Instead, set this number back to the default, hit save, and wait for bitcoind to restart on its own.',
+      "How much RAM to allocate for caching the TXO set. Higher values improve syncing performance, but may result in some re-work in the event of an ungraceful shutdown. 4-7GB is high enough to get most of the peformance benefit during IBD. Consider reducing this setting for lower resource devices (or a device with less available RAM)",
     required: false,
-    default: null,
+    default: dbcache,
     min: 0,
     integer: true,
     units: 'MiB',
-    placeholder: '450',
+    placeholder: dbcache.toString(),
+  }),
+  dbbatchsize: Value.number({
+    name: 'Database Batch',
+    description:
+      "Maximum database write batch size in bytes. Higher values will speed up the critical sections when the utxo set is written to disk from memory in big batches.",
+    required: false,
+    default: dbbatchsize,
+    min: 0,
+    integer: true,
+    units: 'Bytes',
+    placeholder: dbbatchsize.toString(),
   }),
   blockfilters: Value.object(
     {
@@ -145,8 +154,8 @@ export const config = sdk.Action.withInput(
 
   // metadata
   async ({ effects }) => ({
-    name: 'Customize Bitcoin',
-    description: 'Edit the bitcoin.conf configuration file',
+    name: 'Other Settings',
+    description: 'Edit more values in bitcoin.conf',
     warning: null,
     allowedStatuses: 'any',
     group: 'Configuration',
@@ -168,28 +177,39 @@ async function read(effects: any): Promise<PartialConfigSpec> {
   if (!bitcoinConf) return {}
 
   return {
-    zmqEnabled: Object.keys(bitcoinConf).includes('zmqpubrawblock'),
-    txindex: !!bitcoinConf.txindex,
-    coinstatsindex: !!bitcoinConf.coinstatsindex,
+    zmqEnabled:
+      !!bitcoinConf?.zmqpubhashblock &&
+      bitcoinConf.zmqpubhashblock !== '' &&
+      !!bitcoinConf?.zmqpubhashtx &&
+      bitcoinConf.zmqpubhashtx !== '' &&
+      !!bitcoinConf?.zmqpubrawblock &&
+      bitcoinConf.zmqpubrawblock !== '' &&
+      !!bitcoinConf?.zmqpubrawtx &&
+      bitcoinConf.zmqpubrawtx !== '' &&
+      !!bitcoinConf?.zmqpubsequence &&
+      bitcoinConf.zmqpubsequence !== '',
+    txindex: bitcoinConf.txindex,
+    coinstatsindex: bitcoinConf.coinstatsindex,
     wallet: {
       enable: !bitcoinConf.disablewallet,
-      avoidpartialspends: !!bitcoinConf.avoidpartialspends,
+      avoidpartialspends: bitcoinConf.avoidpartialspends,
       discardfee: bitcoinConf.discardfee,
     },
+    blocknotify: bitcoinConf.blocknotify,
     prune: bitcoinConf.prune,
     dbcache: bitcoinConf.dbcache,
     blockfilters: {
       blockfilterindex: bitcoinConf.blockfilterindex === ('basic' as const),
-      peerblockfilters: !!bitcoinConf.peerblockfilters,
+      peerblockfilters: bitcoinConf.peerblockfilters,
     },
-    peerbloomfilters: !!bitcoinConf.peerbloomfilters,
+    peerbloomfilters: bitcoinConf.peerbloomfilters,
   }
 }
 
 async function write(effects: T.Effects, input: ConfigSpec) {
   const otherConfig = {
     // RPC
-    rpcbind: input.prune ? '127.0.0.1:18332' : '0.0.0.0:8332',
+    rpcbind: input.prune ? '127.0.0.1:48332' : '0.0.0.0:48332',
     rpcallowip: input.prune ? '127.0.0.1/32' : '0.0.0.0/0',
 
     // Wallet
@@ -198,18 +218,21 @@ async function write(effects: T.Effects, input: ConfigSpec) {
     discardfee: input.wallet.discardfee || discardfee,
 
     // Other
-    txindex: input.txindex,
+    txindex: input.prune !== 0 ? false : input.txindex,
     coinstatsindex: input.coinstatsindex,
     peerbloomfilters: input.peerbloomfilters,
     peerblockfilters: input.blockfilters.peerblockfilters,
-    blockfilterindex: input.blockfilters.blockfilterindex ? 'basic' : undefined,
+    blockfilterindex: input.blockfilters.blockfilterindex
+      ? ('basic' as const)
+      : false,
+    blocknotify: input.blocknotify ? input.blocknotify : blocknotify,
     prune: input.prune ? input.prune : prune,
     dbcache: input.dbcache ? input.dbcache : dbcache,
-    zmqpubrawblock: input.zmqEnabled ? 'tcp://0.0.0.0:28332' : undefined,
-    zmqpubhashblock: input.zmqEnabled ? 'tcp://0.0.0.0:28332' : undefined,
-    zmqpubrawtx: input.zmqEnabled ? 'tcp://0.0.0.0:28333' : undefined,
-    zmqpubhashtx: input.zmqEnabled ? 'tcp://0.0.0.0:28333' : undefined,
-    zmqpubsequence: input.zmqEnabled ? 'tcp://0.0.0.0:28333' : undefined,
+    zmqpubrawblock: input.zmqEnabled ? 'tcp://0.0.0.0:28332' : '',
+    zmqpubhashblock: input.zmqEnabled ? 'tcp://0.0.0.0:28332' : '',
+    zmqpubrawtx: input.zmqEnabled ? 'tcp://0.0.0.0:28333' : '',
+    zmqpubhashtx: input.zmqEnabled ? 'tcp://0.0.0.0:28333' : '',
+    zmqpubsequence: input.zmqEnabled ? 'tcp://0.0.0.0:28333' : '',
   }
 
   await bitcoinConfFile.merge(effects, otherConfig)

@@ -1,36 +1,39 @@
 import { T } from '@start9labs/start-sdk'
-import { bitcoinConfFile, shape } from '../../file-models/bitcoin.conf'
+import { bitcoinConfFile, shape } from '../../fileModels/bitcoin.conf'
 import { sdk } from '../../sdk'
 import { bitcoinConfDefaults, getExteralAddresses } from '../../utils'
 
-const { listen, onlynet, v2transport, externalip, addnode, connect, bind } =
+const { onlynet, v2transport, externalip, addnode, connect } =
   bitcoinConfDefaults
 const { Value, Variants, List, InputSpec } = sdk
+const validNets = ['ipv4', 'ipv6', 'onion', 'i2p', 'cjdns'] as const
+type ValidNets = (typeof validNets)[number]
 
 const peerSpec = sdk.InputSpec.of({
-  listen: Value.toggle({
-    name: 'Make Public',
-    default: !!listen,
-    description: 'Allow other nodes to find your server on the network.',
-  }),
-  onlyonion: Value.toggle({
-    name: 'Disable Clearnet',
-    default: !!onlynet,
-    description: 'Only connect to peers over Tor.',
+  onlynet: Value.multiselect({
+    name: 'Onlynet',
+    description:
+      'Make automatic outbound connections only to network <net> (ipv4, ipv6, onion, i2p, cjdns). Inbound and manual connections are not affected by this option',
+    values: {
+      ipv4: 'ipv4',
+      ipv6: 'ipv6',
+      onion: 'onion (Tor)',
+      i2p: 'i2p',
+      cjdns: 'cjdns',
+    },
+    default: [],
   }),
   v2transport: Value.toggle({
     name: 'Use V2 P2P Transport Protocol',
-    default: !!v2transport,
+    default: v2transport,
     description:
       'Enable or disable the use of BIP324 V2 P2P transport protocol.',
   }),
   externalip: getExteralAddresses(),
-  connectpeer: Value.union(
-    {
-      name: 'Connect Peer',
-      default: 'addnode',
-    },
-    Variants.of({
+  connectpeer: Value.union({
+    name: 'Connect Peer',
+    default: 'addnode',
+    variants: Variants.of({
       connect: {
         name: 'Connect',
         spec: InputSpec.of({
@@ -82,7 +85,7 @@ const peerSpec = sdk.InputSpec.of({
         }),
       },
     }),
-  ),
+  }),
 })
 
 export const peerConfig = sdk.Action.withInput(
@@ -114,12 +117,15 @@ async function read(effects: any): Promise<PartialPeerSpec> {
   if (!bitcoinConf) return {}
 
   const peerSettings: PartialPeerSpec = {
-    listen: !!bitcoinConf.listen,
-    onlyonion:
-      bitcoinConf.onlynet === undefined
-        ? !!onlynet
-        : bitcoinConf.onlynet === ('onion' as const),
-    v2transport: !!bitcoinConf.v2transport,
+    onlynet: bitcoinConf.onlynet
+      ? [bitcoinConf.onlynet]
+          .flat()
+          .filter(
+            (x): x is ValidNets =>
+              x !== undefined && (validNets as readonly string[]).includes(x),
+          )
+      : onlynet,
+    v2transport: bitcoinConf.v2transport,
     externalip:
       bitcoinConf.externalip === undefined ? 'none' : bitcoinConf.externalip,
     connectpeer: {
@@ -142,10 +148,8 @@ async function read(effects: any): Promise<PartialPeerSpec> {
 
 async function write(effects: T.Effects, input: peerSpec) {
   const peerSettings = {
-    listen: input.listen,
-    bind: input.listen ? '0.0.0.0:8333' : bind,
     v2transport: input.v2transport,
-    onlynet: input.onlyonion ? 'onion' : onlynet,
+    onlynet: input.onlynet.length > 0 ? input.onlynet : onlynet,
     externalip: input.externalip !== 'none' ? input.externalip : externalip,
   }
 

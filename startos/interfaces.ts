@@ -1,12 +1,13 @@
-import { bitcoinConfFile } from './file-models/bitcoin.conf'
+import { bitcoinConfFile } from './fileModels/bitcoin.conf'
 import { sdk } from './sdk'
-
-export const rpcInterfaceId = 'rpc'
-export const peerInterfaceId = 'peer'
-export const zmqInterfaceId = 'zmq'
-export const zmqPort = 28332
-export const peerPort = 8333
-export const rpcPort = 8332
+import {
+  peerInterfaceId,
+  peerPort,
+  rpcInterfaceId,
+  rpcPort,
+  zmqInterfaceId,
+  zmqPort,
+} from './utils'
 
 export const setInterfaces = sdk.setupInterfaces(async ({ effects }) => {
   let config = await bitcoinConfFile.read().const(effects)
@@ -28,7 +29,7 @@ export const setInterfaces = sdk.setupInterfaces(async ({ effects }) => {
     schemeOverride: null,
     username: null,
     path: '',
-    search: {},
+    query: {},
   })
   const rpcReceipt = await rpcMultiOrigin.export([rpc])
 
@@ -36,7 +37,6 @@ export const setInterfaces = sdk.setupInterfaces(async ({ effects }) => {
 
   // PEER
   const peerMulti = sdk.MultiHost.of(effects, 'peer')
-  // @TODO Aiden confirm below is correct
   const peerMultiOrigin = await peerMulti.bindPort(peerPort, {
     protocol: null,
     preferredExternalPort: peerPort,
@@ -53,7 +53,7 @@ export const setInterfaces = sdk.setupInterfaces(async ({ effects }) => {
     schemeOverride: { ssl: null, noSsl: null },
     username: null,
     path: '',
-    search: {},
+    query: {},
   })
   const peerReceipt = await peerMultiOrigin.export([peer])
 
@@ -78,7 +78,7 @@ export const setInterfaces = sdk.setupInterfaces(async ({ effects }) => {
       schemeOverride: null,
       username: null,
       path: '',
-      search: {},
+      query: {},
     })
     const zmqReceipt = await zmqMultiOrigin.export([zmq])
 

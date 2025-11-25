@@ -6,6 +6,7 @@ const { anyOf, arrayOf, object } = matches
 const stringArray = matches.array(matches.string)
 const string = stringArray.map(([a]) => a).orParser(matches.string)
 const number = string.map((a) => Number(a)).orParser(matches.number)
+const natural = string.map((a) => Number(a)).orParser(matches.natural)
 const boolean = number.map((a) => !!a).orParser(matches.boolean)
 const literal = (val: string | number) => {
   return matches
@@ -15,6 +16,14 @@ const literal = (val: string | number) => {
     .map((a) => (typeof val === 'number' ? Number(a) : a))
 }
 
+const onlyNetOptions = anyOf(
+  matches.literal('ipv4'),
+  matches.literal('ipv6'),
+  matches.literal('onion'),
+  matches.literal('i2p'),
+  matches.literal('cjdns'),
+)
+
 const {
   rpcbind,
   rpcallowip,
@@ -23,17 +32,15 @@ const {
   rpcthreads,
   rpcworkqueue,
   rpccookiefile,
-  whitelist,
-  bind,
+  // whitebind, // Removed - passed as CLI arg
+  // bind, // Removed - passed as CLI arg
   persistmempool,
   maxmempool,
   mempoolexpiry,
-  mempoolfullrbf,
   permitbaremultisig,
   datacarrier,
   datacarriersize,
   listen,
-  onlynet,
   externalip,
   v2transport,
   connect,
@@ -41,6 +48,7 @@ const {
   disablewallet,
   avoidpartialspends,
   discardfee,
+  blocknotify,
   prune,
   zmqpubrawblock,
   zmqpubhashblock,
@@ -50,6 +58,7 @@ const {
   coinstatsindex,
   txindex,
   dbcache,
+  dbbatchsize,
   peerbloomfilters,
   blockfilterindex,
   peerblockfilters,
@@ -60,37 +69,43 @@ export const shape = object({
   rpcbind: string.onMismatch(rpcbind),
   rpcallowip: string.onMismatch(rpcallowip),
   rpcauth: stringArray.orParser(string).optional().onMismatch(rpcauth),
-  rpcservertimeout: number.onMismatch(rpcservertimeout),
-  rpcthreads: number.onMismatch(rpcthreads),
-  rpcworkqueue: number.onMismatch(rpcworkqueue),
+  rpcservertimeout: natural.onMismatch(rpcservertimeout),
+  rpcthreads: natural.onMismatch(rpcthreads),
+  rpcworkqueue: natural.onMismatch(rpcworkqueue),
   rpccookiefile: literal(rpccookiefile).onMismatch(rpccookiefile),
+  rpcuser: matches.literal(undefined).optional().onMismatch(undefined),
+  rpcpassword: matches.literal(undefined).optional().onMismatch(undefined),
 
   // Mempool
-  mempoolfullrbf: boolean.onMismatch(mempoolfullrbf),
   persistmempool: boolean.optional().onMismatch(persistmempool),
-  maxmempool: number.optional().onMismatch(maxmempool),
-  mempoolexpiry: number.onMismatch(mempoolexpiry),
+  maxmempool: natural.optional().onMismatch(maxmempool),
+  mempoolexpiry: natural.onMismatch(mempoolexpiry),
   datacarrier: boolean.onMismatch(datacarrier),
-  datacarriersize: number.onMismatch(datacarriersize),
+  datacarriersize: natural.onMismatch(datacarriersize),
   permitbaremultisig: boolean.onMismatch(permitbaremultisig),
 
   // Peers
-  listen: boolean.onMismatch(listen),
-  bind: string.optional().onMismatch(bind),
+  listen: matches.literal(listen).onMismatch(listen),
+  // bind: Removed - passed as CLI arg for testnet4 compatibility
   connect: stringArray.orParser(string).optional().onMismatch(connect),
   addnode: stringArray.orParser(string).optional().onMismatch(addnode),
-  onlynet: string.optional().onMismatch(onlynet),
+  onlynet: arrayOf(onlyNetOptions.optional().onMismatch(undefined)).optional(),
   v2transport: boolean.onMismatch(v2transport),
   externalip: string.optional().onMismatch(externalip),
 
-  // Whitelist
-  whitelist: stringArray.orParser(string).optional().onMismatch(whitelist),
+  // Blocknotify
+  blocknotify: string.optional().onMismatch(blocknotify),
+
+  // Whitebind: Removed - passed as CLI arg for testnet4 compatibility
+  whitelist: stringArray.orParser(string).optional().onMismatch(undefined),
 
   // Pruning
-  prune: number.onMismatch(prune),
+  prune: natural.onMismatch(prune),
 
   // Performance Tuning
-  dbcache: number.onMismatch(dbcache),
+  dbcache: natural.onMismatch(dbcache),
+  dbbatchsize: natural.onMismatch(dbbatchsize),
+  assumevalid: string.optional().onMismatch('00000000000000000000611fd22f2df7c8fbd0688745c3a6c3bb5109cc2a12cb'),
 
   // Wallet
   disablewallet: boolean.onMismatch(disablewallet),
@@ -114,9 +129,11 @@ export const shape = object({
   peerbloomfilters: boolean.onMismatch(peerbloomfilters),
 
   // BIP157
-  blockfilterindex: string.optional().onMismatch(blockfilterindex),
+  blockfilterindex: anyOf(matches.literal('basic'), boolean)
+    .optional()
+    .onMismatch(blockfilterindex),
   peerblockfilters: boolean.onMismatch(peerblockfilters),
-})
+}).onMismatch(bitcoinConfDefaults)
 
 function onWrite(a: unknown): any {
   if (a && typeof a === 'object') {
@@ -133,7 +150,10 @@ function onWrite(a: unknown): any {
 }
 
 export const bitcoinConfFile = FileHelper.ini(
-  '/media/startos/volumes/main/bitcoin.conf',
+  {
+    volumeId: 'main',
+    subpath: '/bitcoin.conf',
+  },
   shape,
   { bracketedArray: false },
   {
