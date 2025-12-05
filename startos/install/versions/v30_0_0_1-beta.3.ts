@@ -15,27 +15,27 @@ export const v30_0_0_1_beta3 = VersionInfo.of({
         enableIpc: bitcoinConfDefaults.enableIpc,
       })
 
-      // Remove bind and whitebind from bitcoin.conf using sed
+      // Remove bind and whitebind from bitcoin.conf if it exists
       // (they're now passed as CLI args for testnet4 compatibility)
-      await sdk.SubContainer.withTemp(
-        effects,
-        { imageId: 'bitcoind' },
-        mainMounts,
-        'cleanup-config',
-        async (subc) => {
-          // Remove bind= and whitebind= lines from bitcoin.conf
-          await subc.exec([
-            'sed',
-            '-i',
-            '/^bind=/d; /^whitebind=/d',
-            `${rootDir}/bitcoin.conf`,
-          ])
-        },
-      )
-
-      // Also rewrite the config through the FileHelper to ensure consistency
       const existingConf = await bitcoinConfFile.read().once()
       if (existingConf) {
+        // Remove bind/whitebind using sed if file exists
+        await sdk.SubContainer.withTemp(
+          effects,
+          { imageId: 'bitcoind' },
+          mainMounts,
+          'cleanup-config',
+          async (subc) => {
+            // Check if file exists, then remove bind= and whitebind= lines
+            await subc.exec([
+              'sh',
+              '-c',
+              `test -f ${rootDir}/bitcoin.conf && sed -i '/^bind=/d; /^whitebind=/d' ${rootDir}/bitcoin.conf || true`,
+            ])
+          },
+        )
+
+        // Rewrite the config through the FileHelper to ensure consistency
         await bitcoinConfFile.write(effects, existingConf)
       }
     },

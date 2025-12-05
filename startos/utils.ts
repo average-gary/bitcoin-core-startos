@@ -60,7 +60,7 @@ export type GetBlockchainInfo = {
   warnings: string
 }
 
-export const ipcSocketPath = 'unix:/ipc/bitcoin-core.sock'
+export const ipcSocketPath = `unix:${rootDir}/ipc/bitcoin-core.sock`
 
 export const bitcoinConfDefaults = {
   // RPC
@@ -71,7 +71,7 @@ export const bitcoinConfDefaults = {
   rpcthreads: 4,
   rpcworkqueue: 16,
   rpccookiefile: '.cookie',
-  enableIpc: true,
+  enableIpc: false,
   // whitebind: Removed - passed as CLI arg for testnet4
   // bind: Removed - passed as CLI arg for testnet4
 
