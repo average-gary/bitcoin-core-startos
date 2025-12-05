@@ -1,7 +1,7 @@
 import { VersionInfo } from '@start9labs/start-sdk'
 import { storeJson } from '../../fileModels/store.json'
 import { bitcoinConfFile } from '../../fileModels/bitcoin.conf'
-import { bitcoinConfDefaults, rootDir } from '../../utils'
+import { rootDir } from '../../utils'
 import { sdk } from '../../sdk'
 import { mainMounts } from '../../main'
 
@@ -12,7 +12,7 @@ export const v30_0_0_1_beta3 = VersionInfo.of({
     up: async ({ effects }) => {
       // Add enableIpc to store.json (not bitcoin.conf)
       await storeJson.merge(effects, {
-        enableIpc: bitcoinConfDefaults.enableIpc,
+        enableIpc: false,
       })
 
       // Remove bind and whitebind from bitcoin.conf if it exists

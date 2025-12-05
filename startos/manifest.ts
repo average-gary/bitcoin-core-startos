@@ -21,7 +21,7 @@ export const manifest = setupManifest({
     short: 'A Bitcoin Testnet4 Full Node by Bitcoin Core',
     long: 'Bitcoin Testnet4 is the fourth iteration of Bitcoin\'s test blockchain network. This service runs a full Bitcoin Core node on the testnet4 network, which is used for testing and development without risking real bitcoin. Testnet4 provides a safe environment to experiment with Bitcoin transactions, smart contracts, and application development. Bitcoin is an innovative payment network and a new kind of money that uses peer-to-peer technology to operate with no central authority or banks.',
   },
-  volumes: ['main', 'proxy', 'ipc'],
+  volumes: ['main', 'proxy'],
   images: {
     bitcoind: {
       source: {

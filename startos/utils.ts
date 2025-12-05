@@ -71,7 +71,6 @@ export const bitcoinConfDefaults = {
   rpcthreads: 4,
   rpcworkqueue: 16,
   rpccookiefile: '.cookie',
-  enableIpc: false,
   // whitebind: Removed - passed as CLI arg for testnet4
   // bind: Removed - passed as CLI arg for testnet4
 
