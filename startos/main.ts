@@ -50,7 +50,7 @@ export const main = sdk.setupMain(async ({ effects, started }) => {
   bitcoinArgs.push(`-whitebind=0.0.0.0:48333`)
 
   // Add IPC binding if enabled
-  const store = await storeJson.read().once()
+  const store = await storeJson.read().const(effects)
   const enableIpc = store?.enableIpc === true // Default to false if not set
 
   // Use bitcoin-node for IPC support (in libexec), bitcoind otherwise
